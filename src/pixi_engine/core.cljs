@@ -1,38 +1,24 @@
 (ns ^:figwheel-hooks pixi-engine.core
   (:require
-   [oops.core :refer [oget+]]
-   [goog.dom :as gdom]
-   [pixi-engine.wrapper :as pixi]))
+   [pixi-engine.wrapper :as game]
+   [pixi-engine.pixi :as pixi]))
 
 (defonce pixi-app (pixi/create-application))
-(defonce loader (.-loader pixi-app))
 (defonce stage (.-stage pixi-app))
 (defonce chickadee nil)
 (defonce key-state (atom {}))
 
 (def SPEED 5)
 
-(defn vec2 [x y]
-  [x y])
-
-(defn vec-x [v]
-  (get v 0))
-
-(defn vec-y [v]
-  (get v 1))
-
-(defn get-app-element []
-  (gdom/getElement "app"))
-
 (defn create-entity
   ([resource-name pos]
    (create-entity resource-name pos {}))
-  ([resource-name pos {:keys [vel] :or {:vel (vec2 0 0)}}]
+  ([resource-name pos {:keys [vel] :or {:vel (game/vec2 0 0)}}]
    (atom {:sprite (pixi/create-sprite (pixi/get-resource pixi-app resource-name))
-          :x (vec-x pos)
-          :y (vec-y pos)
-          :vx (vec-x vel)
-          :vy (vec-y vel)})))
+          :x (game/vec-x pos)
+          :y (game/vec-y pos)
+          :vx (game/vec-x vel)
+          :vy (game/vec-y vel)})))
 
 (defn set-vel-x! [entity v]
   (swap! entity assoc :vx v))
@@ -57,10 +43,6 @@
 (defn on-keyup [e]
   (let [key (.-key e)]
     (swap! key-state assoc (keyword key) false)))
-
-(defn key-subscribe! []
-  (. js/window addEventListener "keydown" on-keydown false)
-  (. js/window addEventListener "keyup" on-keyup false))
 
 (defn update-bird! [dt]
   "Move the bird if they click the arrows"
@@ -87,23 +69,19 @@
 (defn update-game! [dt]
   (update-bird! dt))
 
+(def sprites {:chickadee "chickadee.png"})
+
 (defn setup []
-  (set! chickadee (create-entity "chickadee" (vec2 0 0)))
-  (pixi/add-child! stage (:sprite @chickadee))
+  (set! chickadee (create-entity "chickadee" (game/vec2 0 0)))
+  (game/add-entity! stage chickadee))
 
-  (. (.-ticker pixi-app) add update-game!)
-  (key-subscribe!))
-
-(defn init! []
-  "Init stuff"
-
-  (gdom/appendChild (get-app-element) (.-view pixi-app))
-
-  (-> loader
-      (. add "chickadee" "chickadee.png")
-      (. load setup)))
-
-(init!)
+(game/init!
+ pixi-app
+ {:sprites sprites
+  :update update-game!
+  :setup setup
+  :on-keydown on-keydown
+  :on-keyup on-keyup})
 
 ;; specify reload hook with ^;after-load metadata
 (defn ^:after-load on-reload []
