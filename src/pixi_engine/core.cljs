@@ -2,57 +2,61 @@
   (:require
    [oops.core :refer [oget+]]
    [goog.dom :as gdom]
-   [pixi]))
+   [pixi-engine.wrapper :as pixi]))
 
-(defonce PIXIApplication (.-Application pixi))
-(defonce Sprite (.-Sprite pixi))
-(defonce pixi-app (PIXIApplication.))
+(defonce pixi-app (pixi/create-application))
 (defonce loader (.-loader pixi-app))
 (defonce stage (.-stage pixi-app))
 (defonce chickadee nil)
-(defonce key-state {})
+(defonce key-state (atom {}))
 
 (def SPEED 5)
+
+(defn vec2 [x y]
+  [x y])
+
+(defn vec-x [v]
+  (get v 0))
+
+(defn vec-y [v]
+  (get v 1))
 
 (defn get-app-element []
   (gdom/getElement "app"))
 
-(gdom/appendChild (get-app-element) (.-view pixi-app))
+(defn create-entity
+  ([resource-name pos]
+   (create-entity resource-name pos {}))
+  ([resource-name pos {:keys [vel] :or {:vel (vec2 0 0)}}]
+   (atom {:sprite (pixi/create-sprite (pixi/get-resource pixi-app resource-name))
+          :x (vec-x pos)
+          :y (vec-y pos)
+          :vx (vec-x vel)
+          :vy (vec-y vel)})))
 
-(defn get-resource [name]
-  (let [resources (.. pixi-app -loader -resources)]
-    (oget+ resources name)))
+(defn set-vel-x! [entity v]
+  (swap! entity assoc :vx v))
 
-(defn create-sprite [resource]
-  (let [sprite (Sprite. (.-texture (get-resource resource)))]
-    (set! (.-vx sprite) 0)
-    (set! (.-vy sprite) 0)
-    sprite))
+(defn set-vel-y! [entity v]
+  (swap! entity assoc :vy v))
 
-(defn add-child! [stage sprite]
-  (. stage addChild sprite))
-
-(defn set-vel-x! [sprite v]
-  (set! (.-vx sprite) v))
-
-(defn set-vel-y! [sprite v]
-  (set! (.-vy sprite) v))
-
-(defn update-sprite! [dt sprite]
-  (let [x (.-x sprite)
-        y (.-y sprite)
-        vx (.-vx sprite)
-        vy (.-vy sprite)]
+(defn update-entity! [dt entity]
+  (let [e @entity
+        sprite (:sprite e)
+        vx (:vx e)
+        vy (:vy e)
+        x (.-x sprite)
+        y (.-y sprite)]
     (set! (.-x sprite) (+ x (* dt vx)))
     (set! (.-y sprite) (+ y (* dt vy)))))
 
 (defn on-keydown [e]
   (let [key (.-key e)]
-    (set! key-state (assoc key-state (keyword key) true))))
+    (swap! key-state assoc (keyword key) true)))
 
 (defn on-keyup [e]
   (let [key (.-key e)]
-    (set! key-state (assoc key-state (keyword key) false))))
+    (swap! key-state assoc (keyword key) false)))
 
 (defn key-subscribe! []
   (. js/window addEventListener "keydown" on-keydown false)
@@ -61,10 +65,11 @@
 (defn update-bird! [dt]
   "Move the bird if they click the arrows"
 
-  (let [up (:ArrowUp key-state)
-        down (:ArrowDown key-state)
-        left (:ArrowLeft key-state)
-        right (:ArrowRight key-state)]
+  (let [ks @key-state
+        up (:ArrowUp ks)
+        down (:ArrowDown ks)
+        left (:ArrowLeft ks)
+        right (:ArrowRight ks)]
 
     (if left (set-vel-x! chickadee (* -1 SPEED)))
     (if right (set-vel-x! chickadee SPEED))
@@ -77,20 +82,22 @@
     (if (or (and up down) (and (not up) (not down)))
       (set-vel-y! chickadee 0)))
 
-  (update-sprite! dt chickadee))
+  (update-entity! dt chickadee))
 
 (defn update-game! [dt]
   (update-bird! dt))
 
 (defn setup []
-  (set! chickadee (create-sprite "chickadee"))
-  (add-child! stage chickadee)
+  (set! chickadee (create-entity "chickadee" (vec2 0 0)))
+  (pixi/add-child! stage (:sprite @chickadee))
 
   (. (.-ticker pixi-app) add update-game!)
   (key-subscribe!))
 
 (defn init! []
   "Init stuff"
+
+  (gdom/appendChild (get-app-element) (.-view pixi-app))
 
   (-> loader
       (. add "chickadee" "chickadee.png")
